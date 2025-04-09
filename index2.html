@@ -1,1 +1,298 @@
+<!DOCTYPE html>  
+<html lang="zh-CN">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>正念钟 - 每小时提醒</title>  
+    <style>  
+        body {  
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;  
+            background-color: #f5f5f7;  
+            color: #1d1d1f;  
+            display: flex;  
+            flex-direction: column;  
+            align-items: center;  
+            justify-content: center;  
+            min-height: 100vh;  
+            margin: 0;  
+            padding: 20px;  
+            text-align: center;  
+        }  
 
+        .container {  
+            background-color: white;  
+            border-radius: 20px;  
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);  
+            padding: 30px;  
+            width: 90%;  
+            max-width: 500px;  
+        }  
+
+        h1 {  
+            color: #1d1d1f;  
+            font-size: 2rem;  
+            margin-bottom: 20px;  
+        }  
+
+        .clock {  
+            font-size: 3.5rem;  
+            font-weight: 200;  
+            margin: 30px 0;  
+            color: #007aff;  
+        }  
+
+        .controls {  
+            display: flex;  
+            justify-content: center;  
+            gap: 15px;  
+            margin: 20px 0;  
+        }  
+
+        button {  
+            background-color: #007aff;  
+            color: white;  
+            border: none;  
+            border-radius: 10px;  
+            padding: 12px 25px;  
+            font-size: 1rem;  
+            cursor: pointer;  
+            transition: background-color 0.3s;  
+        }  
+
+        button:hover {  
+            background-color: #0062cc;  
+        }  
+
+        button:active {  
+            transform: translateY(1px);  
+        }  
+
+        button.secondary {  
+            background-color: #8e8e93;  
+        }  
+
+        button.secondary:hover {  
+            background-color: #7a7a7f;  
+        }  
+
+        .settings {  
+            margin-top: 20px;  
+            display: flex;  
+            flex-direction: column;  
+            align-items: center;  
+        }  
+
+        .settings-row {  
+            display: flex;  
+            align-items: center;  
+            margin: 10px 0;  
+        }  
+
+        .status {  
+            margin-top: 20px;  
+            padding: 10px;  
+            background-color: #f2f2f2;  
+            border-radius: 10px;  
+            font-size: 0.9rem;  
+        }  
+
+        .volume-control {  
+            display: flex;  
+            align-items: center;  
+            margin: 10px 0;  
+            width: 100%;  
+            justify-content: center;  
+        }  
+
+        .volume-control label {  
+            margin-right: 10px;  
+        }  
+
+        input[type="range"] {  
+            width: 150px;  
+        }  
+
+        .bell-count {  
+            margin-left: 15px;  
+        }  
+
+        @media (max-width: 480px) {  
+            .clock {  
+                font-size: 2.5rem;  
+            }  
+            
+            .controls {  
+                flex-direction: column;  
+            }  
+        }  
+    </style>  
+</head>  
+<body>  
+    <div class="container">  
+        <h1>正念钟</h1>  
+        <div class="clock" id="clock">00:00:00</div>  
+        
+        <div class="status" id="status">  
+            正念钟已启动，每小时将响铃三声  
+        </div>  
+        
+        <div class="controls">  
+            <button id="testBell">测试铃声</button>  
+            <button id="toggleBell" class="secondary">暂停提醒</button>  
+        </div>  
+
+        <div class="settings">  
+            <div class="volume-control">  
+                <label for="volume">音量:</label>  
+                <input type="range" id="volume" min="0" max="1" step="0.1" value="0.7">  
+            </div>  
+            
+            <div class="settings-row">  
+                <label for="bellCount">每次响铃次数:</label>  
+                <select id="bellCount" class="bell-count">  
+                    <option value="1">1次</option>  
+                    <option value="2">2次</option>  
+                    <option value="3" selected>3次</option>  
+                    <option value="5">5次</option>  
+                    <option value="7">7次</option>  
+                </select>  
+            </div>  
+        </div>  
+    </div>  
+
+    <script>  
+        // 创建音频上下文  
+        let audioContext = null;  
+        let bellCount = 3;  
+        let volume = 0.7;  
+        let bellActive = true;  
+        let lastHour = -1;  
+        
+        // 初始化音频上下文  
+        function initAudio() {  
+            // 只有用户交互后才能创建音频上下文  
+            if (audioContext === null) {  
+                try {  
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();  
+                    document.getElementById('status').textContent = '正念钟已启动，每小时将响铃三声';  
+                } catch (e) {  
+                    console.error('Web Audio API不受支持:', e);  
+                    document.getElementById('status').textContent = '错误：您的浏览器不支持音频功能';  
+                }  
+            }  
+        }  
+
+        // 播放钟声  
+        function playBell() {  
+            if (!audioContext) return;  
+            
+            // 获取当前音量设置  
+            const currentVolume = parseFloat(document.getElementById('volume').value);  
+            
+            // 播放指定次数的钟声  
+            let count = 0;  
+            const selectedBellCount = parseInt(document.getElementById('bellCount').value);  
+            
+            function playSingleBell() {  
+                if (count < selectedBellCount) {  
+                    const oscillator = audioContext.createOscillator();  
+                    const gainNode = audioContext.createGain();  
+                    
+                    oscillator.type = 'sine';  
+                    oscillator.frequency.value = 440; // A4音  
+                    
+                    gainNode.gain.value = currentVolume;  
+                    
+                    oscillator.connect(gainNode);  
+                    gainNode.connect(audioContext.destination);  
+                    
+                    const now = audioContext.currentTime;  
+                    
+                    // 渐入  
+                    gainNode.gain.setValueAtTime(0, now);  
+                    gainNode.gain.linearRampToValueAtTime(currentVolume, now + 0.1);  
+                    
+                    // 渐出  
+                    gainNode.gain.setValueAtTime(currentVolume, now + 0.8);  
+                    gainNode.gain.linearRampToValueAtTime(0, now + 1.5);  
+                    
+                    oscillator.start();  
+                    oscillator.stop(now + 1.5);  
+                    
+                    count++;  
+                    setTimeout(playSingleBell, 2000); // 每2秒播放一次  
+                }  
+            }  
+            
+            playSingleBell();  
+            
+            return new Promise(resolve => {  
+                setTimeout(resolve, selectedBellCount * 2000 + 500);  
+            });  
+        }  
+
+        // 更新时钟显示  
+        function updateClock() {  
+            const now = new Date();  
+            const hours = String(now.getHours()).padStart(2, '0');  
+            const minutes = String(now.getMinutes()).padStart(2, '0');  
+            const seconds = String(now.getSeconds()).padStart(2, '0');  
+            
+            document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;  
+            
+            // 检查是否需要响铃（新的一个小时开始且启用了钟声）  
+            const currentHour = now.getHours();  
+            if (bellActive && currentHour !== lastHour && now.getMinutes() === 0 && now.getSeconds() === 0) {  
+                lastHour = currentHour;  
+                playBell();  
+            }  
+        }  
+
+        // 初始化  
+        document.addEventListener('DOMContentLoaded', () => {  
+            // 设置时钟  
+            updateClock();  
+            setInterval(updateClock, 1000);  
+            
+            // 测试铃声按钮  
+            document.getElementById('testBell').addEventListener('click', () => {  
+                initAudio();  
+                playBell();  
+            });  
+            
+            // 切换铃声开关  
+            const toggleButton = document.getElementById('toggleBell');  
+            toggleButton.addEventListener('click', () => {  
+                bellActive = !bellActive;  
+                
+                if (bellActive) {  
+                    toggleButton.textContent = '暂停提醒';  
+                    toggleButton.className = 'secondary';  
+                    document.getElementById('status').textContent = '正念钟已启动，每小时将响铃';  
+                } else {  
+                    toggleButton.textContent = '启用提醒';  
+                    toggleButton.className = '';  
+                    document.getElementById('status').textContent = '正念钟已暂停';  
+                }  
+            });  
+            
+            // 音量控制  
+            document.getElementById('volume').addEventListener('change', (e) => {  
+                volume = parseFloat(e.target.value);  
+            });  
+            
+            // 响铃次数控制  
+            document.getElementById('bellCount').addEventListener('change', (e) => {  
+                bellCount = parseInt(e.target.value);  
+                document.getElementById('status').textContent = `正念钟已启动，每小时将响铃${bellCount}声`;  
+            });  
+            
+            // 检查上次响铃的小时  
+            lastHour = new Date().getHours();  
+        });  
+
+        // 确保在用户交互后初始化音频  
+        document.addEventListener('click', initAudio, { once: true });  
+    </script>  
+</body>  
+</html>  
